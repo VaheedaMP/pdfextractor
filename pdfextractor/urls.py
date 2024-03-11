@@ -17,11 +17,14 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 
-from pdfapp import views
+# from . import views
+
+# import pdfapp
 
 # from .pdfapp import views
+from pdfapp.views import extract_pdf_view
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('ext/', views.extract_pdf_data, name='extract_pdf'),
+    path('ext/', extract_pdf_view, name='extract_pdf_view'),
 ]

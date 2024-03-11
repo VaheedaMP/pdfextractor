@@ -37,7 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'pdfapp.apps.PdfappConfig',
+    'pdfapp',
     'rest_framework',
 ]
 

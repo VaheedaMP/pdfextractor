@@ -6,15 +6,15 @@ from PyPDF2 import PdfReader
 import logging
 from .models import PdfDetail
 from django.db.utils import IntegrityError
-# import logging.config
+import logging.config
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-# import fitz  # PyMuPDF
-# import pdfplumber
+import fitz  # PyMuPDF
+import pdfplumber
 
 # Configure logging using the configuration file
-logging.config.fileConfig('logging.conf')
+# logging.config.fileConfig('logging.conf')
 
 # Get the logger for this module
 # from pdfexactor.log_config import setup_logger
