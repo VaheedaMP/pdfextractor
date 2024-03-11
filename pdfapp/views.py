@@ -11,6 +11,7 @@ import logging
 
 from rest_framework.decorators import api_view
 
+
 from .models import PdfDetail
 from django.db.utils import IntegrityError
 import logging.config
@@ -19,9 +20,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 import fitz  # PyMuPDF
 import pdfplumber
+# import textract
 
 # Configure logging using the configuration file
-# logging.config.fileConfig('logging.conf')
+
 
 # Get the logger for this module
 # from pdfexactor.log_config import setup_logger
@@ -31,19 +33,75 @@ from django.views.decorators.csrf import csrf_exempt
 from .serializers import PdfDetailSerializer
 from django.conf import settings
 
+import pytesseract
+from PIL import Image
+# import logging
+#
+# logger = logging.getLogger(__name__)
+from pdf2image import convert_from_path
 
 
-# Setup your logger
-# logger = setup_logger('pdf_extraction', 'logs/pdf_extraction.log')
+def extract_text_from_image(pdf_path):
+    try:
+        # Get the directory path containing the PDF file
+        pdf_dir = os.path.dirname(pdf_path)
 
-def extract_pdf_data(file_path):
-    # with open(file_path, 'rb') as file:
-        reader = PyPDF2.PdfReader(file_path)
+        # Convert PDF pages to images
+        images = convert_from_path(pdf_path)
+
+        # Initialize an empty string to store extracted text
+        extracted_text = ""
+
+        # Iterate over each image
+        for img in images:
+            # Use Tesseract OCR to extract text from the image
+            text = pytesseract.image_to_string(img)
+            extracted_text += text
+
+        return extracted_text
+    except Exception as e:
+        print(f"Error occurred while extracting text from {pdf_path}: {e}")
+        return None
+
+def extract_pdf_data(filename):
+    # reader = PyPDF2.PdfReader(filename)
+    # text = ''
+    # for page_num in range(len(reader.pages)):
+    #     text += reader.pages[page_num].extract_text()
+    # print(text)
+    # return text
+    # print("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&")
+    try:
         text = ''
-        for page_num in range(len(reader.pages)):
-            text += reader.pages[page_num].extract_text()
-        print(text)
+        with pdfplumber.open(filename) as pdf:
+            for page in pdf.pages:
+                text += page.extract_text()
+            print("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&",text)
+
         return text
+    except Exception as e:
+        print(f"Error occurred while extracting text from {filename}: {e}")
+        return None
+    # try:
+    #     text = textract.process(filename, method='pdftotext').decode('utf-8')
+    #     return text
+    # except Exception as e:
+    #     print(f"Error occurred while extracting text from {filename}: {e}")
+    #     return None
+
+
+# def extract_pdf_data(file_path):
+#     try:
+#         text = ''
+#         with fitz.open(file_path) as doc:
+#             for page_num in range(len(doc)):
+#                 page = doc.load_page(page_num)
+#                 text += page.get_text()
+#         print("#################################################",text)
+#         return text
+#     except Exception as e:
+#         print("Error:", e)
+#         return None
 # def extract_pdf_data(request):
 #     if request.method != 'POST':
 #         return JsonResponse({'error': 'Only POST requests are allowed'}, status=405)
@@ -102,7 +160,7 @@ def extract_pdf_data(file_path):
 def parse_pdf_text(text):
     # Split the text into lines
     lines = text.split('\n')
-
+    t = ("Order Number", "Invoice Number", "Invoice Date", "Due Date", "Total $", "From:", "To:", "Hrs/Qty", "Service")
     # Initialize variables to store extracted details
     tax_invoice_no = None
     order_number = None
@@ -113,34 +171,41 @@ def parse_pdf_text(text):
     to_address = None
 
     # Iterate through each line to extract details
+    print("------------------------------------------------------", text)
     for line in lines:
-        if "Invoice Number" in line:
-            tax_invoice_no = line.split("Invoice Number")[1].strip()
-        elif "Order Number" in line:
+        line_lower = line.lower()  # Convert the line to lowercase
+        if "invoice number".lower() in line_lower or "invoice no".lower() in line_lower or "invoice #".lower() in line_lower:
+            tax_invoice_no = line.split("Invoice Number")[1].strip() if "Invoice Number".lower() in line_lower else \
+                line.split("Invoice No")[1].strip() if "Invoice No".lower() in line_lower else \
+                    line.split("Invoice #")[1].strip() if "Invoice #".lower() in line_lower else None
+        elif "order number".lower() in line_lower:
             order_number = line.split("Order Number")[1].strip()
-        elif "Invoice Date" in line:
+        elif "invoice date" in line_lower:
             invoice_date_str = line.split("Invoice Date")[1].strip()
             invoice_date = datetime.strptime(invoice_date_str, '%B %d, %Y').strftime('%Y-%m-%d')
-        elif "Due Date" in line:
+        elif "due date" in line_lower:
             due_date_str = line.split("Due Date")[1].strip()
             due_date = datetime.strptime(due_date_str, '%B %d, %Y').strftime('%Y-%m-%d')
-        elif "Total $" in line:  # Extract total amount
-            total_amount = float(line.split("Total $")[1].strip())
-        elif "From:" in line:
-            try:
-                from_address_lines = lines[lines.index(line) + 1: lines.index("To:")]
-                from_address = "\n".join(line for line in from_address_lines if '@' not in line)  # Exclude email
-            except ValueError:
-                pass
-        elif "To:" in line:
-            try:
-                to_address_lines = lines[lines.index(line) + 1: lines.index("Hrs/Qty")]
-                to_address = "\n".join(line for line in to_address_lines if '@' not in line)  # Exclude email
-            except ValueError:
-                to_address = "\n".join(lines[lines.index(line) + 1:])
-                break
+        elif "total" in line_lower:  # Extract total amount
+            # total_amount_str = line.split("Total")[1].strip().replace('$', '')
+            # total_amount = float(total_amount_str)
+            pass
+        elif "from:" in line_lower:
+            from_address_lines = []
+            for i in range(lines.index(line) + 1, len(lines)):
+                if any(lines[i].startswith(prefix) for prefix in t):
+                    break
+                from_address_lines.append(lines[i])
+            from_address = "\n".join(from_address_lines)
+        elif "to:" in line_lower:
+            to_address_lines = []
+            for i in range(lines.index(line) + 1, len(lines)):
+                if any(lines[i].startswith(prefix) for prefix in t):
+                    break
+                to_address_lines.append(lines[i])
+            to_address = "\n".join(to_address_lines)
 
-    # Return a dictionary with the extracted details
+        # Return a dictionary with the extracted details
     return {
         'tax_invoice_no': tax_invoice_no,
         'order_number': order_number,
@@ -156,11 +221,12 @@ def parse_pdf_text(text):
 def upload_pdf(request):
     if request.method == 'POST' and request.FILES['pdf_file']:
         pdf_file = request.FILES['pdf_file']
-        # file_path = os.path.join(settings.MEDIA_ROOT, pdf_file.name)
-        # with open(file_path, 'wb') as destination:
-        #     for chunk in pdf_file.chunks():
-        #         destination.write(chunk)
-        text = extract_pdf_data(pdf_file)
+        file_path = os.path.join(settings.MEDIA_ROOT, pdf_file.name)
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, 'wb') as destination:
+            for chunk in pdf_file.chunks():
+                destination.write(chunk)
+        text = extract_pdf_data(file_path)
         print(text)
         parsed_data = parse_pdf_text(text)
         if 'tax_invoice_no' in parsed_data:
@@ -173,6 +239,6 @@ def upload_pdf(request):
                 serializer.save()
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        return Response({'error': 'Failed to extract invoice details from the PDF.'+text},
+        return Response({'error': 'Failed to extract invoice details from the PDF.' + text},
                         status=status.HTTP_400_BAD_REQUEST)
     return Response({'error': 'Invalid request method or missing PDF file.'}, status=status.HTTP_400_BAD_REQUEST)
