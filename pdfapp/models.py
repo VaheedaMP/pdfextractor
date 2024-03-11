@@ -6,7 +6,13 @@ from django.db import models
 class PdfDetail(models.Model):
     id = models.AutoField(primary_key=True)  # Auto-incrementing primary key
     filename = models.CharField(max_length=255)
-    tax_invoice_no = models.CharField(max_length=255,unique=True, blank=True)  # Allow empty tax invoice number
+    tax_invoice_no = models.CharField(max_length=255,unique=True, blank=True)
+    order_number = models.CharField(max_length=100, blank=True, null=True)
+    due_date = models.DateField(blank=True, null=True)
+    invoice_date = models.DateField(blank=True, null=True)
+    from_address = models.TextField(blank=True, null=True)
+    to_address = models.TextField(blank=True, null=True)
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     status = models.CharField(max_length=50, choices=[
         ('PROCESSING', 'Processing'),
         ('SUCCESS', 'Success'),
