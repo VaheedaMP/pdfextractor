@@ -22,10 +22,11 @@ from django.urls import path
 # import pdfapp
 
 # from .pdfapp import views
-from pdfapp.views import upload_pdf
+from pdfapp.views import upload_pdf,upload_invoice_pdf
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     # path('ext/', extract_pdf_view, name='extract_pdf_view'),
     path('upload/', upload_pdf, name='upload_pdf'),
+    path('invoice/', upload_invoice_pdf, name='upload_pdf')
 ]

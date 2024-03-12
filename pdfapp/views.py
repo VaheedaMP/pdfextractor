@@ -1,160 +1,96 @@
-import json
+
+import io
 import os
 from datetime import datetime
 
 import PyPDF2
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-import re
-from PyPDF2 import PdfReader
-import logging
-
 from rest_framework.decorators import api_view
-
-
-from .models import PdfDetail
-from django.db.utils import IntegrityError
-import logging.config
+from .models import PdfDetail, Invoice
 from rest_framework import status
 from rest_framework.response import Response
-from rest_framework.views import APIView
 import fitz  # PyMuPDF
-import pdfplumber
-# import textract
-
-# Configure logging using the configuration file
-
-
-# Get the logger for this module
-# from pdfexactor.log_config import setup_logger
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-
-from .serializers import PdfDetailSerializer
+from .serializers import PdfDetailSerializer, InvoiceSerializer
 from django.conf import settings
-
 import pytesseract
 from PIL import Image
 # import logging
 #
 # logger = logging.getLogger(__name__)
-from pdf2image import convert_from_path
 
-
-def extract_text_from_image(pdf_path):
-    try:
-        # Get the directory path containing the PDF file
-        pdf_dir = os.path.dirname(pdf_path)
-
-        # Convert PDF pages to images
-        images = convert_from_path(pdf_path)
-
-        # Initialize an empty string to store extracted text
-        extracted_text = ""
-
-        # Iterate over each image
-        for img in images:
-            # Use Tesseract OCR to extract text from the image
-            text = pytesseract.image_to_string(img)
-            extracted_text += text
-
-        return extracted_text
-    except Exception as e:
-        print(f"Error occurred while extracting text from {pdf_path}: {e}")
-        return None
-
-def extract_pdf_data(filename):
-    # reader = PyPDF2.PdfReader(filename)
-    # text = ''
-    # for page_num in range(len(reader.pages)):
-    #     text += reader.pages[page_num].extract_text()
-    # print(text)
-    # return text
-    # print("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&")
+def extract_img_text(filename):
     try:
         text = ''
-        with pdfplumber.open(filename) as pdf:
-            for page in pdf.pages:
-                text += page.extract_text()
-            print("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&",text)
-
+        doc = fitz.open(filename)
+        for page_num in range(len(doc)):
+            page = doc.load_page(page_num)
+            text += page.get_text()
+            for img in page.get_images(full=True):
+                xref = img[0]
+                base_image = doc.extract_image(xref)
+                image_data = base_image["image"]
+                image = Image.open(io.BytesIO(image_data))
+                # Convert image to RGB format (PyMuPDF supports RGB images)
+                if image.mode != "RGB":
+                    image = image.convert("RGB")
+                # Perform OCR on the image
+                text += pytesseract.image_to_string(image)
+        print(text)
         return text
     except Exception as e:
         print(f"Error occurred while extracting text from {filename}: {e}")
         return None
-    # try:
-    #     text = textract.process(filename, method='pdftotext').decode('utf-8')
-    #     return text
-    # except Exception as e:
-    #     print(f"Error occurred while extracting text from {filename}: {e}")
-    #     return None
 
+def extract_pdf_data(filename):
+    try:
+        reader = PyPDF2.PdfReader(filename)
+        text = ''
+        for page_num in range(len(reader.pages)):
+            text += reader.pages[page_num].extract_text()
+        print(text)
+        return text
+    except Exception as e:
+        print(f"Error occurred while extracting text from {filename}: {e}")
+        return None
 
-# def extract_pdf_data(file_path):
-#     try:
-#         text = ''
-#         with fitz.open(file_path) as doc:
-#             for page_num in range(len(doc)):
-#                 page = doc.load_page(page_num)
-#                 text += page.get_text()
-#         print("#################################################",text)
-#         return text
-#     except Exception as e:
-#         print("Error:", e)
-#         return None
-# def extract_pdf_data(request):
-#     if request.method != 'POST':
-#         return JsonResponse({'error': 'Only POST requests are allowed'}, status=405)
-#
-#     if 'pdf_file' not in request.FILES:
-#         return JsonResponse({'error': 'Missing pdf_file field in request body'}, status=400)
-#
-#     pdf_file = request.FILES['pdf_file']
-#     tax_invoice_no = ""
-#
-#     try:
-#         pdf_reader = PdfReader(pdf_file)
-#         print('Successfully opened uploaded PDF file.')
-#
-#         for page_num in range(len(pdf_reader.pages)):
-#             page = pdf_reader.pages[page_num]
-#             page_text = page.extract_text()
-#             tax_invoice_pattern = r"""
-#             (?:
-#                 Tax\s+Invoice\s+No\s[:].|  # Tax Invoice No. (with optional space)
-#                 Tax\s+Invoice\s*[:],    # Tax Invoice: (with optional space and comma)
-#                 Invoice\s+No\.|          # Invoice No.
-#                 Invoice\s*[:]            # Invoice: (with optional space and colon)
-#             )\s*
-#             (\w+\s*\d+)              # Capture alphanumeric + digits (including spaces)
-#         """
-#
-#             match = re.search(tax_invoice_pattern, page_text, re.IGNORECASE | re.VERBOSE)
-#
-#             if match:
-#                 tax_invoice_no = match.group(1).strip()
-#                 print(f'Extracted tax invoice number: {tax_invoice_no}')
-#
-#         try:
-#             pdf_detail = PdfDetail(filename=request.FILES['pdf_file'].name, tax_invoice_no=tax_invoice_no)
-#             pdf_detail.save()
-#             return JsonResponse({'tax_invoice_no': tax_invoice_no})  # Success, return tax invoice number
-#         except IntegrityError:
-#             print(f'Duplicate tax invoice number: {tax_invoice_no}')
-#             return JsonResponse({'tax_invoice_no': 'Duplicate tax invoice number found.'},
-#                                 status=409)  # Conflict (duplicate)
-#
-#     except Exception as e:
-#         print(f'Error processing PDF: {str(e)}')
-#         return JsonResponse({'error': f'Error processing PDF: {str(e)}'}, status=500)
-#
-#
-# @csrf_exempt
-# def extract_pdf_view(request):
-#     """
-#     Wrapper view for handling CSRF exemption for the extract_pdf_data function.
-#     """
-#     return extract_pdf_data(request)
+def extract_invoice_data(text):
+    parse_data = {"tax_invoice_no": "",
+                  "invoice_date": "",
+                  "client_pancard": "",
+                  "client_name": "",
+                  "project_code": "",
+                  "total_amount": "",
+                  "amount_in_words": "", }
+    print(text)
+    lines = text.splitlines()
+    extract_dict = {}
+    for line in lines:
+        parts = line.split(":")
+        if len(parts) == 2:
+            extract_dict[parts[0].strip()] = parts[1].strip()
+    print(extract_dict)
+    for key , value in extract_dict.items():
+        if "Invoice No".lower() in key.lower():
+            parse_data["tax_invoice_no"]=value
+        if "Invoice Date".lower() in key.lower():
+            invoice_date_obj = datetime.strptime(value, '%d-%b-%Y')
+
+            # Convert the datetime object to the desired format ("YYYY-MM-DD")
+            invoice_date_formatted = invoice_date_obj.strftime('%Y-%m-%d')
+
+            parse_data["invoice_date"]=invoice_date_formatted
+        if "PAN" in key:
+            parse_data["client_pancard"]=value
+        if "Mr." in value:
+            parse_data["client_name"]=value
+        if "Project Code".lower() in key.lower():
+            parse_data["project code"]=value
+        if "Total Amount".lower() in key.lower():
+            parse_data["total_amount"]=value
+        if "Amount in Words".lower() in key.lower():
+            parse_data["amount_in_words"]=value
+    print(parse_data)
+    return parse_data
 
 
 def parse_pdf_text(text):
@@ -171,7 +107,7 @@ def parse_pdf_text(text):
     to_address = None
 
     # Iterate through each line to extract details
-    print("------------------------------------------------------", text)
+    print("------------------------------------------------------", lines)
     for line in lines:
         line_lower = line.lower()  # Convert the line to lowercase
         if "invoice number".lower() in line_lower or "invoice no".lower() in line_lower or "invoice #".lower() in line_lower:
@@ -182,13 +118,21 @@ def parse_pdf_text(text):
             order_number = line.split("Order Number")[1].strip()
         elif "invoice date" in line_lower:
             invoice_date_str = line.split("Invoice Date")[1].strip()
-            invoice_date = datetime.strptime(invoice_date_str, '%B %d, %Y').strftime('%Y-%m-%d')
+            try:
+                invoice_date = datetime.strptime(invoice_date_str, '%B %d, %Y').strftime('%Y-%m-%d')
+            except ValueError:
+                # Handle the case where the string cannot be parsed
+                print("Error: Invalid date format")
         elif "due date" in line_lower:
             due_date_str = line.split("Due Date")[1].strip()
-            due_date = datetime.strptime(due_date_str, '%B %d, %Y').strftime('%Y-%m-%d')
-        elif "total" in line_lower:  # Extract total amount
-            # total_amount_str = line.split("Total")[1].strip().replace('$', '')
-            # total_amount = float(total_amount_str)
+            try:
+                due_date = datetime.strptime(due_date_str, '%B %d, %Y').strftime('%Y-%m-%d')
+            except ValueError:
+                # Handle the case where the string cannot be parsed
+                print("Error: Invalid date format")
+        elif "Total Due" in line_lower:  # Extract total amount
+            total_amount_str = line.split("Total Due")[1].strip().replace('$', '')
+            total_amount = float(total_amount_str)
             pass
         elif "from:" in line_lower:
             from_address_lines = []
@@ -227,14 +171,40 @@ def upload_pdf(request):
             for chunk in pdf_file.chunks():
                 destination.write(chunk)
         text = extract_pdf_data(file_path)
-        print(text)
         parsed_data = parse_pdf_text(text)
+        print("------------------------------------------------------------------",parsed_data)
         if 'tax_invoice_no' in parsed_data:
             invoice_number = parsed_data['tax_invoice_no']
             if PdfDetail.objects.filter(tax_invoice_no=invoice_number).exists():
                 return JsonResponse({'error': 'Invoice with this number already exists.'}, status=400)
 
             serializer = PdfDetailSerializer(data=parsed_data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Failed to extract invoice details from the PDF.' + text},
+                        status=status.HTTP_400_BAD_REQUEST)
+    return Response({'error': 'Invalid request method or missing PDF file.'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+def upload_invoice_pdf(request):
+    if request.method == 'POST' and request.FILES['pdf_file']:
+        pdf_file = request.FILES['pdf_file']
+        file_path = os.path.join(settings.MEDIA_ROOT, pdf_file.name)
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, 'wb') as destination:
+            for chunk in pdf_file.chunks():
+                destination.write(chunk)
+        text = extract_img_text(file_path)
+        parsed_data = extract_invoice_data(text)
+        if 'tax_invoice_no' in parsed_data:
+            invoice_number = parsed_data['tax_invoice_no']
+            if Invoice.objects.filter(tax_invoice_no=invoice_number).exists():
+                return JsonResponse({'error': 'Invoice with this number already exists.'}, status=400)
+
+            serializer = InvoiceSerializer(data=parsed_data)
             if serializer.is_valid():
                 serializer.save()
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
