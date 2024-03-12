@@ -45,14 +45,14 @@ def extract_img_text(filename):
 
 def extract_pdf_data(filename):
     try:
+        reader = PyPDF2.PdfReader(filename)
         text = ''
-        with fitz.open(filename) as doc:
-            for page_num in range(len(doc)):
-                page = doc.load_page(page_num)
-                text += page.get_text()
+        for page_num in range(len(reader.pages)):
+            text += reader.pages[page_num].extract_text()
+        print(text)
         return text
     except Exception as e:
-        print("Error:", e)
+        print(f"Error occurred while extracting text from {filename}: {e}")
         return None
 
 
