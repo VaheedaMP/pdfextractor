@@ -84,7 +84,7 @@ def extract_invoice_data(text):
         if "Mr." in value:
             parse_data["client_name"]=value
         if "Project Code".lower() in key.lower():
-            parse_data["project code"]=value
+            parse_data["project_code"]=value
         if "Total Amount".lower() in key.lower():
             parse_data["total_amount"]=value
         if "Amount in Words".lower() in key.lower():
