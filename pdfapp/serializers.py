@@ -12,5 +12,5 @@ class PdfDetailSerializer(serializers.ModelSerializer):
 class InvoiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Invoice
-        fields = ['tax_invoice_no', 'invoice_date', 'client_pancard', 'client_name', 'project_code', 'total_amount',
+        fields = ['tax_invoice_no', 'client_pancard', 'client_name', 'project_code', 'total_amount',
                   'amount_in_words']

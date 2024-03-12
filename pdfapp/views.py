@@ -1,4 +1,3 @@
-
 import io
 import os
 from datetime import datetime
@@ -14,6 +13,8 @@ from .serializers import PdfDetailSerializer, InvoiceSerializer
 from django.conf import settings
 import pytesseract
 from PIL import Image
+
+
 # import logging
 #
 # logger = logging.getLogger(__name__)
@@ -41,21 +42,22 @@ def extract_img_text(filename):
         print(f"Error occurred while extracting text from {filename}: {e}")
         return None
 
+
 def extract_pdf_data(filename):
     try:
-        reader = PyPDF2.PdfReader(filename)
         text = ''
-        for page_num in range(len(reader.pages)):
-            text += reader.pages[page_num].extract_text()
-        print(text)
+        with fitz.open(filename) as doc:
+            for page_num in range(len(doc)):
+                page = doc.load_page(page_num)
+                text += page.get_text()
         return text
     except Exception as e:
-        print(f"Error occurred while extracting text from {filename}: {e}")
+        print("Error:", e)
         return None
+
 
 def extract_invoice_data(text):
     parse_data = {"tax_invoice_no": "",
-                  "invoice_date": "",
                   "client_pancard": "",
                   "client_name": "",
                   "project_code": "",
@@ -69,26 +71,19 @@ def extract_invoice_data(text):
         if len(parts) == 2:
             extract_dict[parts[0].strip()] = parts[1].strip()
     print(extract_dict)
-    for key , value in extract_dict.items():
+    for key, value in extract_dict.items():
         if "Invoice No".lower() in key.lower():
-            parse_data["tax_invoice_no"]=value
-        if "Invoice Date".lower() in key.lower():
-            invoice_date_obj = datetime.strptime(value, '%d-%b-%Y')
-
-            # Convert the datetime object to the desired format ("YYYY-MM-DD")
-            invoice_date_formatted = invoice_date_obj.strftime('%Y-%m-%d')
-
-            parse_data["invoice_date"]=invoice_date_formatted
+            parse_data["tax_invoice_no"] = value
         if "PAN" in key:
-            parse_data["client_pancard"]=value
+            parse_data["client_pancard"] = value
         if "Mr." in value:
-            parse_data["client_name"]=value
+            parse_data["client_name"] = value
         if "Project Code".lower() in key.lower():
-            parse_data["project_code"]=value
+            parse_data["project_code"] = value
         if "Total Amount".lower() in key.lower():
-            parse_data["total_amount"]=value
+            parse_data["total_amount"] = value
         if "Amount in Words".lower() in key.lower():
-            parse_data["amount_in_words"]=value
+            parse_data["amount_in_words"] = value
     print(parse_data)
     return parse_data
 
@@ -172,7 +167,7 @@ def upload_pdf(request):
                 destination.write(chunk)
         text = extract_pdf_data(file_path)
         parsed_data = parse_pdf_text(text)
-        print("------------------------------------------------------------------",parsed_data)
+        print("------------------------------------------------------------------", parsed_data)
         if 'tax_invoice_no' in parsed_data:
             invoice_number = parsed_data['tax_invoice_no']
             if PdfDetail.objects.filter(tax_invoice_no=invoice_number).exists():

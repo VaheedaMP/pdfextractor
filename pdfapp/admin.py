@@ -10,7 +10,7 @@ class InvoiceAdmin(admin.ModelAdmin):
 
 
 class InvoicepdfAdmin(admin.ModelAdmin):
-    list_display = ('tax_invoice_no', 'invoice_date', 'client_pancard', 'client_name', 'project_code', 'total_amount',
+    list_display = ('tax_invoice_no', 'client_pancard', 'client_name', 'project_code', 'total_amount',
                     'amount_in_words')
 
 
